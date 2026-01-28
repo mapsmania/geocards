@@ -10,7 +10,6 @@
     :root {
       --primary-yellow: #ffeb3b;
       --border-thick: 4px solid #000;
-      --border-thin: 1px solid #ddd;
     }
 
     body {
@@ -26,9 +25,9 @@
       padding: 20px;
       display: flex;
       flex-direction: column;
-      z-index: 2; /* Sit over map shadow */
       background: #f0f0f0;
       box-shadow: 10px 0 15px -10px rgba(0,0,0,0.1);
+      z-index: 2;
     }
 
     #name {
@@ -41,53 +40,64 @@
       border-radius: 12px 12px 0 0;
       padding: 16px;
       text-align: center;
-      box-sizing: border-box;
     }
 
     #info {
       flex: 1;
       background: #fff;
       border: var(--border-thick);
-      margin-top: -4px; /* Pull up to merge borders */
+      margin-top: -4px;
       border-radius: 0 0 12px 12px;
       padding: 16px;
       font-size: 0.95rem;
       line-height: 1.6;
       overflow-y: auto;
-      box-sizing: border-box;
-      transition: all 0.2s ease;
     }
 
     #info img {
       width: 100%;
       border-radius: 4px;
       margin-bottom: 12px;
-      border: 1px solid #eee;
     }
 
     .wiki-link {
       display: inline-block;
       margin-top: 15px;
-      color: #000;
       font-weight: bold;
       text-decoration: underline;
+      color: #000;
     }
 
-    #map { flex: 1; }
+    ul {
+      padding-left: 18px;
+    }
 
-    /* Mobile adjustments */
+    li {
+      margin-bottom: 8px;
+    }
+
+    #map {
+      flex: 1;
+    }
+
     @media (max-width: 768px) {
-      body { flex-direction: column; }
-      #sidebar { width: 100%; height: 40%; box-sizing: border-box; padding: 10px; }
-      #map { flex: 1; }
+      body {
+        flex-direction: column;
+      }
+      #sidebar {
+        width: 100%;
+        height: 40%;
+        padding: 10px;
+      }
     }
   </style>
 </head>
+
 <body>
 
 <div id="sidebar">
   <div id="name">Select a Location</div>
-  <div id="info" class="loading">
+  <div id="info">
     <p>Click a road name or city label on the map to see Wikipedia details.</p>
   </div>
 </div>
@@ -109,39 +119,86 @@
   const infoEl = document.getElementById('info');
 
   map.on('load', () => {
+
     async function handleClick(e) {
       const feature = e.features[0];
-      const name = feature.properties?.name || feature.properties?.name_int || 'Unnamed';
+      const name =
+        feature.properties?.name ||
+        feature.properties?.name_int ||
+        'Unnamed location';
 
       nameEl.textContent = name;
-      infoEl.innerHTML = '<em>Searching Wikipedia...</em>';
+      infoEl.innerHTML = '<em>Searching Wikipedia…</em>';
 
-      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
+      const summaryUrl =
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
 
       try {
-        const res = await fetch(url);
-        if(!res.ok) throw new Error();
+        const res = await fetch(summaryUrl);
+        if (!res.ok) throw new Error();
+
         const data = await res.json();
-        
-        // Build rich content
+        if (data.type === 'disambiguation') throw new Error();
+
         let html = '';
         if (data.thumbnail) {
           html += `<img src="${data.thumbnail.source}" alt="${name}">`;
         }
         html += `<p>${data.extract || 'No description found.'}</p>`;
         if (data.content_urls) {
-          html += `<a class="wiki-link" href="${data.content_urls.desktop.page}" target="_blank">Read Full Article →</a>`;
+          html += `<a class="wiki-link" href="${data.content_urls.desktop.page}" target="_blank">
+            Read Full Article →
+          </a>`;
         }
-        
+
         infoEl.innerHTML = html;
-      } catch (err) {
-        infoEl.innerHTML = '<p>No Wikipedia page found for this location.</p>';
+
+      } catch {
+
+        // ===== FALLBACK: GEOSEARCH =====
+        nameEl.textContent = 'Nothing here — but nearby:';
+
+        const { lng, lat } = e.lngLat;
+        const geoUrl =
+          `https://en.wikipedia.org/w/api.php?action=query&list=geosearch` +
+          `&gscoord=${lat}|${lng}&gsradius=1000&gslimit=6&format=json&origin=*`;
+
+        try {
+          const geoRes = await fetch(geoUrl);
+          const geoData = await geoRes.json();
+          const results = geoData.query.geosearch;
+
+          if (!results.length) {
+            infoEl.innerHTML = '<p>No nearby Wikipedia articles found.</p>';
+            return;
+          }
+
+          let html = '<ul>';
+          results.forEach(place => {
+            const link =
+              `https://en.wikipedia.org/wiki/${encodeURIComponent(place.title)}`;
+            html += `
+              <li>
+                <a href="${link}" target="_blank">${place.title}</a>
+                <small> (${Math.round(place.dist)} m)</small>
+              </li>`;
+          });
+          html += '</ul>';
+
+          infoEl.innerHTML = html;
+
+        } catch {
+          infoEl.innerHTML = '<p>Nearby search failed.</p>';
+        }
       }
     }
 
     const clickableLayers = [
       'label_city', 'label_town', 'label_village', 'label_city_capital',
-      'highway-name-minor', 'highway-name-major', 'label_other'
+      'label_state', 'label_country_1', 'label_country_2',
+      'highway-name-major', 'highway-name-minor',
+      'poi_r1', 'poi_transit',
+      'water_name_point_label', 'waterway_line_label'
     ];
 
     clickableLayers.forEach(layer => {
@@ -151,5 +208,6 @@
     });
   });
 </script>
+
 </body>
 </html>

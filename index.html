@@ -152,10 +152,18 @@
     container: 'map',
     style: 'https://tiles.openfreemap.org/styles/liberty',
     center: [-0.09, 51.513],
-    zoom: 14
+    zoom: 14,
+    attributionControl: false 
   });
 
   map.addControl(new maplibregl.NavigationControl());
+map.addControl(
+  new maplibregl.AttributionControl({
+    customAttribution:
+      'Data from <a href="https://www.wikipedia.org/" target="_blank" rel="noopener">Wikipedia</a>'
+  })
+);
+
 
   const nameEl = document.getElementById('name');
   const infoEl = document.getElementById('info');

@@ -30,6 +30,32 @@
       z-index: 2;
     }
 
+    #search {
+      padding: 10px;
+      font-size: 1rem;
+      margin-bottom: 6px;
+      border: 2px solid #000;
+      border-radius: 6px;
+    }
+
+    #results {
+      max-height: 160px;
+      overflow-y: auto;
+      background: #fff;
+      border: 2px solid #000;
+      margin-bottom: 10px;
+    }
+
+    .result {
+      padding: 8px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+
+    .result:hover {
+      background: #f5f5f5;
+    }
+
     #name {
       font-size: 1.3rem;
       font-weight: 800;
@@ -68,25 +94,15 @@
       color: #000;
     }
 
-    ul {
-      padding-left: 18px;
-    }
-
-    li {
-      margin-bottom: 8px;
-    }
-
     #map {
       flex: 1;
     }
 
     @media (max-width: 768px) {
-      body {
-        flex-direction: column;
-      }
+      body { flex-direction: column; }
       #sidebar {
         width: 100%;
-        height: 40%;
+        height: 45%;
         padding: 10px;
       }
     }
@@ -96,6 +112,10 @@
 <body>
 
 <div id="sidebar">
+
+  <input id="search" type="text" placeholder="Search for a city…" autocomplete="off">
+  <div id="results"></div>
+
   <div id="name">Select a Location</div>
   <div id="info">
     <p>Click a road name or city label on the map to see Wikipedia details.</p>
@@ -117,9 +137,107 @@
 
   const nameEl = document.getElementById('name');
   const infoEl = document.getElementById('info');
+  const searchInput = document.getElementById('search');
+  const resultsEl = document.getElementById('results');
 
+  let cities = [];
+  let marker;
+
+  fetch('https://mapsmania.github.io/geocoder/cities.json')
+    .then(res => res.json())
+    .then(data => cities = data);
+
+  // ===== REUSABLE WIKIPEDIA LOADER =====
+  async function loadWikipediaByName(name, lng, lat, population = null) {
+    nameEl.textContent = name;
+    infoEl.innerHTML = '<em>Searching Wikipedia…</em>';
+
+    const summaryUrl =
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
+
+    try {
+      const res = await fetch(summaryUrl);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.type === 'disambiguation') throw new Error();
+
+      let html = '';
+      if (population) {
+        html += `<p><strong>Population:</strong> ${population.toLocaleString()}</p>`;
+      }
+      if (data.thumbnail) {
+        html += `<img src="${data.thumbnail.source}" alt="${name}">`;
+      }
+      html += `<p>${data.extract}</p>`;
+      html += `<a class="wiki-link" href="${data.content_urls.desktop.page}" target="_blank">
+        Read Full Article →
+      </a>`;
+
+      infoEl.innerHTML = html;
+
+    } catch {
+      nameEl.textContent = 'Nothing here — but nearby:';
+
+      const geoUrl =
+        `https://en.wikipedia.org/w/api.php?action=query&list=geosearch` +
+        `&gscoord=${lat}|${lng}&gsradius=1000&gslimit=6&format=json&origin=*`;
+
+      const geoRes = await fetch(geoUrl);
+      const geoData = await geoRes.json();
+      const results = geoData.query.geosearch;
+
+      if (!results.length) {
+        infoEl.innerHTML = '<p>No nearby Wikipedia articles found.</p>';
+        return;
+      }
+
+      infoEl.innerHTML =
+        (population ? `<p><strong>Population:</strong> ${population.toLocaleString()}</p>` : '') +
+        '<ul>' + results.map(p =>
+          `<li><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(p.title)}" target="_blank">
+            ${p.title}</a> <small>(${Math.round(p.dist)} m)</small></li>`
+        ).join('') + '</ul';
+    }
+  }
+
+  // ===== SEARCH =====
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.toLowerCase().trim();
+    resultsEl.innerHTML = '';
+    if (q.length < 2) return;
+
+    cities
+      .filter(c => c.name.toLowerCase().startsWith(q))
+      .slice(0, 8)
+      .forEach(city => {
+        const div = document.createElement('div');
+        div.className = 'result';
+        div.textContent = `${city.name} (${city.id.split('-').pop().toUpperCase()})`;
+
+        div.onclick = () => {
+          map.flyTo({
+            center: [city.lng, city.lat],
+            zoom: 11,
+            essential: true
+          });
+
+          if (marker) marker.remove();
+          marker = new maplibregl.Marker()
+            .setLngLat([city.lng, city.lat])
+            .addTo(map);
+
+          loadWikipediaByName(city.name, city.lng, city.lat, city.pop);
+
+          searchInput.value = city.name;
+          resultsEl.innerHTML = '';
+        };
+
+        resultsEl.appendChild(div);
+      });
+  });
+
+  // ===== MAP CLICK HANDLER =====
   map.on('load', () => {
-
     async function handleClick(e) {
       const feature = e.features[0];
       const name =
@@ -127,79 +245,14 @@
         feature.properties?.name_int ||
         'Unnamed location';
 
-      nameEl.textContent = name;
-      infoEl.innerHTML = '<em>Searching Wikipedia…</em>';
-
-      const summaryUrl =
-        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
-
-      try {
-        const res = await fetch(summaryUrl);
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
-        if (data.type === 'disambiguation') throw new Error();
-
-        let html = '';
-        if (data.thumbnail) {
-          html += `<img src="${data.thumbnail.source}" alt="${name}">`;
-        }
-        html += `<p>${data.extract || 'No description found.'}</p>`;
-        if (data.content_urls) {
-          html += `<a class="wiki-link" href="${data.content_urls.desktop.page}" target="_blank">
-            Read Full Article →
-          </a>`;
-        }
-
-        infoEl.innerHTML = html;
-
-      } catch {
-
-        // ===== FALLBACK: GEOSEARCH =====
-        nameEl.textContent = 'Nothing here — but nearby:';
-
-        const { lng, lat } = e.lngLat;
-        const geoUrl =
-          `https://en.wikipedia.org/w/api.php?action=query&list=geosearch` +
-          `&gscoord=${lat}|${lng}&gsradius=1000&gslimit=6&format=json&origin=*`;
-
-        try {
-          const geoRes = await fetch(geoUrl);
-          const geoData = await geoRes.json();
-          const results = geoData.query.geosearch;
-
-          if (!results.length) {
-            infoEl.innerHTML = '<p>No nearby Wikipedia articles found.</p>';
-            return;
-          }
-
-          let html = '<ul>';
-          results.forEach(place => {
-            const link =
-              `https://en.wikipedia.org/wiki/${encodeURIComponent(place.title)}`;
-            html += `
-              <li>
-                <a href="${link}" target="_blank">${place.title}</a>
-                <small> (${Math.round(place.dist)} m)</small>
-              </li>`;
-          });
-          html += '</ul>';
-
-          infoEl.innerHTML = html;
-
-        } catch {
-          infoEl.innerHTML = '<p>Nearby search failed.</p>';
-        }
-      }
+      loadWikipediaByName(name, e.lngLat.lng, e.lngLat.lat);
     }
 
-    const clickableLayers = [
-      'label_city', 'label_town', 'label_village', 'label_city_capital',
-      'label_state', 'label_country_1', 'label_country_2',
-      'highway-name-major', 'highway-name-minor',
-      'poi_r1', 'poi_transit',
-      'water_name_point_label', 'waterway_line_label'
-    ];
+    const clickableLayers = [ 'label_city', 'label_town', 'label_village', 'label_city_capital', 'label_state', 
+                              'highway-name-minor', 'highway-name-major', 'label_other', 
+                              'label_country_1', 'label_country_2', 'label_country_3', 
+                              'airport', 'poi_r1', 'poi_transit', 
+                              'water_name_point_label', 'waterway_line_label', ];
 
     clickableLayers.forEach(layer => {
       map.on('click', layer, handleClick);

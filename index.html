@@ -21,35 +21,33 @@
     }
 
     #sidebar {
-      width: 360px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      background: #f0f0f0;
-      box-shadow: 10px 0 15px -10px rgba(0,0,0,0.1);
-      z-index: 2;
-    }
+  width: 360px;
+  padding: 12px 20px; /* reduce top padding from 20px to 12px */
+  display: flex;
+  flex-direction: column;
+  background: #f0f0f0;
+  box-shadow: 10px 0 15px -10px rgba(0,0,0,0.1);
+  z-index: 2;
+}
 
-    #search {
-      width: 90%;
-      padding: 12px 14px;
-      font-size: 1rem;
-      border-radius: 999px;
-      border: 1px solid #ddd;
-      outline: none;
-      background: #fff;
-      box-shadow:
-        0 1px 2px rgba(0,0,0,0.08),
-        0 2px 6px rgba(0,0,0,0.06);
-    }
+#search {
+  width: 90%;
+  padding: 12px 14px;
+  font-size: 1rem;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  outline: none;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.08),
+    0 2px 6px rgba(0,0,0,0.06);
+  margin-bottom: 6px; /* make space below search consistent */
+}
 
-    #results {
-      margin-top: 6px;
-      border-radius: 12px;
-      overflow: hidden;
-      background: #fff;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
+#results {
+  margin-bottom: 12px; /* add same spacing below results before info */
+}
+
 
     .result {
       padding: 10px 14px;
@@ -113,10 +111,19 @@
   <input id="search" type="text" placeholder="Search for a place…" autocomplete="off">
   <div id="results"></div>
 
-  <div id="name">Select a Location</div>
+  <div id="name">Geocards</div>
   <div id="info">
-    <p>Click a road name or city label on the map to see Wikipedia details.</p>
-  </div>
+  <p>Welcome to <strong>GeoCards</strong>! Explore cities, landmarks, and regions around the world.</p>
+
+  <p><strong>How to use:</strong></p>
+  <ul>
+    <li><strong>Search:</strong> Type a place name in the search box above. Suggestions will appear — click to zoom to that location.</li>
+    <li><strong>Map interaction:</strong> Click on city labels, town names, road names, or points of interest directly on the map to view related Wikipedia articles.</li>
+    <li><strong>Wikipedia info:</strong> The sidebar shows a summary from Wikipedia, including images if available, and links to the full article.</li>
+   </ul>
+
+  <p>Try searching for "Paris", clicking on New York City on the map, or exploring any visible landmark — the map will show you Wikipedia details instantly!</p>
+</div>
 </div>
 
 <div id="map"></div>
@@ -126,8 +133,8 @@
   const map = new maplibregl.Map({
     container: 'map',
     style: 'https://tiles.openfreemap.org/styles/liberty',
-    center: [-0.09, 51.513],
-    zoom: 14,
+    center: [0, 20],
+    zoom: 1.5,
     attributionControl: false
   });
 

@@ -102,6 +102,26 @@
       body { flex-direction: column; }
       #sidebar { width: 100%; height: 45%; }
     }
+
+    /* Skeleton Base */
+.skeleton {
+  background-color: #e0e0e0;
+  background-image: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+  background-size: 200% 100%;
+  animation: loading-shimmer 1.5s infinite;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+@keyframes loading-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Skeleton Shapes */
+.sk-img { width: 100%; height: 200px; border: 3px solid #ddd; }
+.sk-text { width: 100%; height: 16px; }
+.sk-text-short { width: 60%; height: 16px; }
   </style>
 </head>
 
@@ -157,46 +177,51 @@
 
   // ===== WIKIPEDIA LOADER =====
   async function loadWikipediaByName(name, lng, lat) {
-    nameEl.textContent = name;
-    infoEl.innerHTML = '<em>Searching Wikipedia…</em>';
+  nameEl.textContent = name;
+  
+  // 1. Show Skeleton Loader
+  infoEl.innerHTML = `
+    <div class="skeleton sk-img"></div>
+    <div class="skeleton sk-text"></div>
+    <div class="skeleton sk-text"></div>
+    <div class="skeleton sk-text-short"></div>
+  `;
 
-    try {
-      const res = await fetch(
-        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`
-      );
-      if (!res.ok) throw new Error();
+  try {
+    const res = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`
+    );
+    if (!res.ok) throw new Error();
 
-      const data = await res.json();
-      if (data.type === 'disambiguation') throw new Error();
+    const data = await res.json();
+    if (data.type === 'disambiguation') throw new Error();
 
-      infoEl.innerHTML = `
-        ${data.thumbnail ? `<img src="${data.thumbnail.source}">` : ''}
-        <p>${data.extract}</p>
-        <a class="wiki-link" href="${data.content_urls.desktop.page}" target="_blank">
-          Read Full Article →
-        </a>
-      `;
-    } catch {
-      const geoUrl =
-        `https://en.wikipedia.org/w/api.php?action=query&list=geosearch` +
-        `&gscoord=${lat}|${lng}&gsradius=1000&gslimit=6&format=json&origin=*`;
+    // 2. Replace Skeleton with Real Data
+    infoEl.innerHTML = `
+      ${data.thumbnail ? `<img src="${data.thumbnail.source}" onload="this.style.opacity=1" style="opacity:0; transition: opacity 0.3s;">` : ''}
+      <p>${data.extract}</p>
+      <a class="wiki-link" href="${data.content_urls.desktop.page}" target="_blank">
+        Read Full Article →
+      </a>
+    `;
+  } catch {
+    // 3. Fallback to GeoSearch if primary page fails
+    const geoUrl = `https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lng}&gsradius=1000&gslimit=6&format=json&origin=*`;
+    
+    const geoRes = await fetch(geoUrl);
+    const geoData = await geoRes.json();
+    const results = geoData.query.geosearch;
 
-      const geoRes = await fetch(geoUrl);
-      const geoData = await geoRes.json();
-      const results = geoData.query.geosearch;
-
-      if (!results.length) {
-        infoEl.innerHTML = '<p>No nearby Wikipedia articles found.</p>';
-        return;
-      }
-
-      infoEl.innerHTML =
-        '<ul>' + results.map(p =>
-          `<li><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(p.title)}" target="_blank">
-            ${p.title}</a> (${Math.round(p.dist)} m)</li>`
-        ).join('') + '</ul>';
+    if (!results.length) {
+      infoEl.innerHTML = '<p>No nearby Wikipedia articles found.</p>';
+      return;
     }
+
+    infoEl.innerHTML = '<strong>Nearby Places:</strong><ul>' + 
+      results.map(p => `<li><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(p.title)}" target="_blank">${p.title}</a></li>`).join('') + 
+      '</ul>';
   }
+}
 
   // ===== PHOTON SEARCH =====
   async function photonSearch(query) {

@@ -31,58 +31,40 @@
     }
 
     #search {
-  width: 90%;
-  padding: 12px 14px;
-  font-size: 1rem;
-  border-radius: 999px; /* pill shape */
-  border: 1px solid #ddd;
-  outline: none;
-  background: #fff;
-
-  box-shadow:
-    0 1px 2px rgba(0,0,0,0.08),
-    0 2px 6px rgba(0,0,0,0.06);
-
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
-}
-
-#search::placeholder {
-  color: #888;
-}
-
-#search:focus {
-  border-color: #1a73e8; /* Google-ish blue */
-  box-shadow:
-    0 1px 2px rgba(0,0,0,0.1),
-    0 4px 10px rgba(26,115,232,0.25);
-}
-
+      width: 90%;
+      padding: 12px 14px;
+      font-size: 1rem;
+      border-radius: 999px;
+      border: 1px solid #ddd;
+      outline: none;
+      background: #fff;
+      box-shadow:
+        0 1px 2px rgba(0,0,0,0.08),
+        0 2px 6px rgba(0,0,0,0.06);
+    }
 
     #results {
-  margin-top: 6px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #fff;
-  box-shadow:
-    0 4px 12px rgba(0,0,0,0.15);
-  border: none;
-}
+      margin-top: 6px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
 
-.result {
-  padding: 10px 14px;
-  font-size: 0.95rem;
-}
+    .result {
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
 
-.result:hover {
-  background: #f1f3f4; /* Google hover gray */
-}
-
+    .result:hover {
+      background: #f1f3f4;
+    }
 
     #name {
       font-size: 1.3rem;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
       background-color: var(--primary-yellow);
       border: var(--border-thick);
       border-radius: 12px 12px 0 0;
@@ -97,8 +79,6 @@
       margin-top: -4px;
       border-radius: 0 0 12px 12px;
       padding: 16px;
-      font-size: 0.95rem;
-      line-height: 1.6;
       overflow-y: auto;
     }
 
@@ -122,11 +102,7 @@
 
     @media (max-width: 768px) {
       body { flex-direction: column; }
-      #sidebar {
-        width: 100%;
-        height: 45%;
-        padding: 10px;
-      }
+      #sidebar { width: 100%; height: 45%; }
     }
   </style>
 </head>
@@ -134,8 +110,7 @@
 <body>
 
 <div id="sidebar">
-
-  <input id="search" type="text" placeholder="Search for a city…" autocomplete="off">
+  <input id="search" type="text" placeholder="Search for a place…" autocomplete="off">
   <div id="results"></div>
 
   <div id="name">Select a Location</div>
@@ -153,61 +128,48 @@
     style: 'https://tiles.openfreemap.org/styles/liberty',
     center: [-0.09, 51.513],
     zoom: 14,
-    attributionControl: false 
+    attributionControl: false
   });
 
   map.addControl(new maplibregl.NavigationControl());
-map.addControl(
-  new maplibregl.AttributionControl({
-    customAttribution:
-      'Data from <a href="https://www.wikipedia.org/" target="_blank" rel="noopener">Wikipedia</a>'
-  })
-);
-
+  map.addControl(
+    new maplibregl.AttributionControl({
+      customAttribution:
+        'Data from <a href="https://www.wikipedia.org/" target="_blank">Wikipedia</a>'
+    })
+  );
 
   const nameEl = document.getElementById('name');
   const infoEl = document.getElementById('info');
   const searchInput = document.getElementById('search');
   const resultsEl = document.getElementById('results');
 
-  let cities = [];
   let marker;
+  let searchTimeout;
+  const searchCache = {};
 
-  fetch('https://mapsmania.github.io/geocoder/cities.json')
-    .then(res => res.json())
-    .then(data => cities = data);
-
-  // ===== REUSABLE WIKIPEDIA LOADER =====
-  async function loadWikipediaByName(name, lng, lat, population = null) {
+  // ===== WIKIPEDIA LOADER =====
+  async function loadWikipediaByName(name, lng, lat) {
     nameEl.textContent = name;
     infoEl.innerHTML = '<em>Searching Wikipedia…</em>';
 
-    const summaryUrl =
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
-
     try {
-      const res = await fetch(summaryUrl);
+      const res = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`
+      );
       if (!res.ok) throw new Error();
+
       const data = await res.json();
       if (data.type === 'disambiguation') throw new Error();
 
-      let html = '';
-      if (population) {
-        html += `<p><strong>Population:</strong> ${population.toLocaleString()}</p>`;
-      }
-      if (data.thumbnail) {
-        html += `<img src="${data.thumbnail.source}" alt="${name}">`;
-      }
-      html += `<p>${data.extract}</p>`;
-      html += `<a class="wiki-link" href="${data.content_urls.desktop.page}" target="_blank">
-        Read Full Article →
-      </a>`;
-
-      infoEl.innerHTML = html;
-
+      infoEl.innerHTML = `
+        ${data.thumbnail ? `<img src="${data.thumbnail.source}">` : ''}
+        <p>${data.extract}</p>
+        <a class="wiki-link" href="${data.content_urls.desktop.page}" target="_blank">
+          Read Full Article →
+        </a>
+      `;
     } catch {
-      nameEl.textContent = 'Nothing here — but nearby:';
-
       const geoUrl =
         `https://en.wikipedia.org/w/api.php?action=query&list=geosearch` +
         `&gscoord=${lat}|${lng}&gsradius=1000&gslimit=6&format=json&origin=*`;
@@ -222,70 +184,83 @@ map.addControl(
       }
 
       infoEl.innerHTML =
-        (population ? `<p><strong>Population:</strong> ${population.toLocaleString()}</p>` : '') +
         '<ul>' + results.map(p =>
           `<li><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(p.title)}" target="_blank">
-            ${p.title}</a> <small>(${Math.round(p.dist)} m)</small></li>`
-        ).join('') + '</ul';
+            ${p.title}</a> (${Math.round(p.dist)} m)</li>`
+        ).join('') + '</ul>';
     }
   }
 
-  // ===== SEARCH =====
+  // ===== PHOTON SEARCH =====
+  async function photonSearch(query) {
+    if (searchCache[query]) return searchCache[query];
+
+    const res = await fetch(
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6`
+    );
+
+    if (res.status === 429) throw new Error('RATE_LIMIT');
+
+    const data = await res.json();
+    searchCache[query] = data.features || [];
+    return searchCache[query];
+  }
+
   searchInput.addEventListener('input', () => {
-    const q = searchInput.value.toLowerCase().trim();
+    const q = searchInput.value.trim();
     resultsEl.innerHTML = '';
-    if (q.length < 2) return;
 
-    cities
-      .filter(c => c.name.toLowerCase().startsWith(q))
-      .slice(0, 8)
-      .forEach(city => {
-        const div = document.createElement('div');
-        div.className = 'result';
-        div.textContent = `${city.name} (${city.id.split('-').pop().toUpperCase()})`;
+    if (q.length < 3) return;
 
-        div.onclick = () => {
-          map.flyTo({
-            center: [city.lng, city.lat],
-            zoom: 11,
-            essential: true
-          });
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+      try {
+        const features = await photonSearch(q);
 
-          if (marker) marker.remove();
-          marker = new maplibregl.Marker()
-            .setLngLat([city.lng, city.lat])
-            .addTo(map);
+        features.forEach(f => {
+          const [lng, lat] = f.geometry.coordinates;
+          const p = f.properties;
 
-          loadWikipediaByName(city.name, city.lng, city.lat, city.pop);
+          let title = p.name || q;
+          if (p.city && p.city !== title) title += `, ${p.city}`;
 
-          searchInput.value = city.name;
-          resultsEl.innerHTML = '';
-        };
+          const div = document.createElement('div');
+          div.className = 'result';
+          div.innerHTML = `<strong>${title}</strong><br><small>${p.country || ''}</small>`;
 
-        resultsEl.appendChild(div);
-      });
+          div.onclick = () => {
+            map.flyTo({ center: [lng, lat], zoom: 11 });
+
+            if (marker) marker.remove();
+            marker = new maplibregl.Marker().setLngLat([lng, lat]).addTo(map);
+
+            loadWikipediaByName(title, lng, lat);
+            searchInput.value = title;
+            resultsEl.innerHTML = '';
+          };
+
+          resultsEl.appendChild(div);
+        });
+      } catch (e) {
+        resultsEl.innerHTML =
+          '<div class="result">Too many searches — slow down 🙂</div>';
+      }
+    }, 400);
   });
 
   // ===== MAP CLICK HANDLER =====
   map.on('load', () => {
-    async function handleClick(e) {
-      const feature = e.features[0];
-      const name =
-        feature.properties?.name ||
-        feature.properties?.name_int ||
-        'Unnamed location';
-
-      loadWikipediaByName(name, e.lngLat.lng, e.lngLat.lat);
-    }
-
-    const clickableLayers = [ 'label_city', 'label_town', 'label_village', 'label_city_capital', 'label_state', 
-                              'highway-name-minor', 'highway-name-major', 'label_other', 
+    const layers =  [ 'label_city', 'label_town', 'label_village', 'label_city_capital', 'label_state', 
+                              'highway-name-minor', 'highway-name-major', 'label_other', 'highway-name-path',
                               'label_country_1', 'label_country_2', 'label_country_3', 
-                              'airport', 'poi_r1', 'poi_transit', 
+                              'airport', 'poi_r1', 'poi_transit', 'poi_r2', 'poi_r3', 'poi_r4', 'poi_r5', 'poi_r6', 'poi_r7',
                               'water_name_point_label', 'waterway_line_label', ];
 
-    clickableLayers.forEach(layer => {
-      map.on('click', layer, handleClick);
+    layers.forEach(layer => {
+      map.on('click', layer, e => {
+        const name = e.features[0]?.properties?.name;
+        if (name) loadWikipediaByName(name, e.lngLat.lng, e.lngLat.lat);
+      });
       map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
       map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
     });

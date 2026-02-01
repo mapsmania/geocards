@@ -21,18 +21,25 @@
     }
 
     #sidebar {
-  width: 360px;
-  padding: 12px 20px; /* reduce top padding from 20px to 12px */
-  display: flex;
-  flex-direction: column;
-  background: #f0f0f0;
-  box-shadow: 10px 0 15px -10px rgba(0,0,0,0.1);
-  z-index: 2;
+      width: 360px;
+      padding: 12px 20px;
+      display: flex;
+      flex-direction: column;
+      background: #f0f0f0;
+      box-shadow: 10px 0 15px -10px rgba(0,0,0,0.1);
+      z-index: 2;
+    }
+
+    /* Search Row */
+
+    #searchWrapper {
+  position: relative;
+  margin-bottom: 6px;
 }
 
 #search {
-  width: 90%;
-  padding: 12px 14px;
+  width: 83%;
+  padding: 12px 14px 12px 42px; /* left padding for icon */
   font-size: 1rem;
   border-radius: 999px;
   border: 1px solid #ddd;
@@ -41,13 +48,23 @@
   box-shadow:
     0 1px 2px rgba(0,0,0,0.08),
     0 2px 6px rgba(0,0,0,0.06);
-  margin-bottom: 6px; /* make space below search consistent */
 }
 
-#results {
-  margin-bottom: 12px; /* add same spacing below results before info */
+#searchIcon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
+
+
+    #results {
+      margin-bottom: 12px;
+    }
 
     .result {
       padding: 10px 14px;
@@ -103,32 +120,37 @@
       #sidebar { width: 100%; height: 45%; }
     }
 
-    /* Skeleton Base */
-.skeleton {
-  background-color: #e0e0e0;
-  background-image: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-  background-size: 200% 100%;
-  animation: loading-shimmer 1.5s infinite;
-  border-radius: 4px;
-  margin-bottom: 10px;
-}
+    /* Skeleton */
+    .skeleton {
+      background-color: #e0e0e0;
+      background-image: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+      background-size: 200% 100%;
+      animation: loading-shimmer 1.5s infinite;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
 
-@keyframes loading-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+    @keyframes loading-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
 
-/* Skeleton Shapes */
-.sk-img { width: 100%; height: 200px; border: 3px solid #ddd; }
-.sk-text { width: 100%; height: 16px; }
-.sk-text-short { width: 60%; height: 16px; }
+    .sk-img { width: 100%; height: 200px; border: 3px solid #ddd; }
+    .sk-text { width: 100%; height: 16px; }
+    .sk-text-short { width: 60%; height: 16px; }
   </style>
 </head>
 
 <body>
 
 <div id="sidebar">
-  <input id="search" type="text" placeholder="Search for a place…" autocomplete="off">
+
+  <div id="searchWrapper">
+  <span id="searchIcon">🔍</span>
+  <input id="search" type="text" placeholder="Search and press Enter…" autocomplete="off">
+</div>
+
+
   <div id="results"></div>
 
   <div id="name">Geocards</div>
@@ -150,36 +172,34 @@
 
 <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
 <script>
-  const map = new maplibregl.Map({
-    container: 'map',
-    style: 'https://tiles.openfreemap.org/styles/liberty',
-    center: [0, 20],
-    zoom: 1.5,
-    attributionControl: false
-  });
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://tiles.openfreemap.org/styles/liberty',
+  center: [0, 20],
+  zoom: 1.5,
+  attributionControl: false
+});
 
-  map.addControl(new maplibregl.NavigationControl());
-  map.addControl(
-    new maplibregl.AttributionControl({
-      customAttribution:
-        'Data from <a href="https://www.wikipedia.org/" target="_blank">Wikipedia</a>'
-    })
-  );
+map.addControl(new maplibregl.NavigationControl());
+map.addControl(
+  new maplibregl.AttributionControl({
+    customAttribution:
+      'Data from <a href="https://www.wikipedia.org/" target="_blank">Wikipedia</a>'
+  })
+);
 
-  const nameEl = document.getElementById('name');
-  const infoEl = document.getElementById('info');
-  const searchInput = document.getElementById('search');
-  const resultsEl = document.getElementById('results');
+const nameEl = document.getElementById('name');
+const infoEl = document.getElementById('info');
+const searchInput = document.getElementById('search');
+const resultsEl = document.getElementById('results');
 
-  let marker;
-  let searchTimeout;
-  const searchCache = {};
+let marker;
+const searchCache = {};
 
-  // ===== WIKIPEDIA LOADER =====
-  async function loadWikipediaByName(name, lng, lat) {
+// ===== WIKIPEDIA =====
+async function loadWikipediaByName(name, lng, lat) {
   nameEl.textContent = name;
-  
-  // 1. Show Skeleton Loader
+
   infoEl.innerHTML = `
     <div class="skeleton sk-img"></div>
     <div class="skeleton sk-text"></div>
@@ -223,80 +243,87 @@
   }
 }
 
-  // ===== PHOTON SEARCH =====
-  async function photonSearch(query) {
-    if (searchCache[query]) return searchCache[query];
+// ===== PHOTON SEARCH =====
+async function photonSearch(query) {
+  if (searchCache[query]) return searchCache[query];
 
-    const res = await fetch(
-      `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6`
-    );
+  const res = await fetch(
+    `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6`
+  );
 
-    if (res.status === 429) throw new Error('RATE_LIMIT');
+  const data = await res.json();
+  searchCache[query] = data.features || [];
+  return searchCache[query];
+}
 
-    const data = await res.json();
-    searchCache[query] = data.features || [];
-    return searchCache[query];
+// ===== BUTTON SEARCH ONLY =====
+async function performSearch() {
+  const q = searchInput.value.trim();
+  resultsEl.innerHTML = '';
+
+  if (q.length < 3) return;
+
+  try {
+    const features = await photonSearch(q);
+
+    features.forEach(f => {
+      const [lng, lat] = f.geometry.coordinates;
+      const p = f.properties;
+
+      let title = p.name || q;
+      if (p.city && p.city !== title) title += `, ${p.city}`;
+
+      const div = document.createElement('div');
+      div.className = 'result';
+      div.innerHTML = `<strong>${title}</strong><br><small>${p.country || ''}</small>`;
+
+      div.onclick = () => {
+        map.flyTo({ center: [lng, lat], zoom: 11 });
+
+        if (marker) marker.remove();
+        marker = new maplibregl.Marker().setLngLat([lng, lat]).addTo(map);
+
+        loadWikipediaByName(title, lng, lat);
+        searchInput.value = title;
+        resultsEl.innerHTML = '';
+      };
+
+      resultsEl.appendChild(div);
+    });
+
+  } catch {
+    resultsEl.innerHTML =
+      '<div class="result">Too many searches — slow down 🙂</div>';
   }
+}
 
-  searchInput.addEventListener('input', () => {
-    const q = searchInput.value.trim();
-    resultsEl.innerHTML = '';
 
-    if (q.length < 3) return;
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    performSearch();
+  }
+});
 
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(async () => {
-      try {
-        const features = await photonSearch(q);
 
-        features.forEach(f => {
-          const [lng, lat] = f.geometry.coordinates;
-          const p = f.properties;
 
-          let title = p.name || q;
-          if (p.city && p.city !== title) title += `, ${p.city}`;
-
-          const div = document.createElement('div');
-          div.className = 'result';
-          div.innerHTML = `<strong>${title}</strong><br><small>${p.country || ''}</small>`;
-
-          div.onclick = () => {
-            map.flyTo({ center: [lng, lat], zoom: 11 });
-
-            if (marker) marker.remove();
-            marker = new maplibregl.Marker().setLngLat([lng, lat]).addTo(map);
-
-            loadWikipediaByName(title, lng, lat);
-            searchInput.value = title;
-            resultsEl.innerHTML = '';
-          };
-
-          resultsEl.appendChild(div);
-        });
-      } catch (e) {
-        resultsEl.innerHTML =
-          '<div class="result">Too many searches — slow down 🙂</div>';
-      }
-    }, 400);
-  });
-
-  // ===== MAP CLICK HANDLER =====
-  map.on('load', () => {
-    const layers =  [ 'label_city', 'label_town', 'label_village', 'label_city_capital', 'label_state', 
+// ===== MAP CLICK =====
+map.on('load', () => {
+  const layers =  [ 'label_city', 'label_town', 'label_village', 'label_city_capital', 'label_state', 
                               'highway-name-minor', 'highway-name-major', 'label_other', 'highway-name-path',
                               'label_country_1', 'label_country_2', 'label_country_3', 
                               'airport', 'poi_r1', 'poi_transit', 'poi_r2', 'poi_r3', 'poi_r4', 'poi_r5', 'poi_r6', 'poi_r7',
                               'water_name_point_label', 'waterway_line_label', ];
 
-    layers.forEach(layer => {
-      map.on('click', layer, e => {
-        const name = e.features[0]?.properties?.name;
-        if (name) loadWikipediaByName(name, e.lngLat.lng, e.lngLat.lat);
-      });
-      map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
-      map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
+  layers.forEach(layer => {
+    map.on('click', layer, e => {
+      const name = e.features[0]?.properties?.name;
+      if (name) loadWikipediaByName(name, e.lngLat.lng, e.lngLat.lat);
     });
+
+    map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
   });
+});
 </script>
 
 </body>
